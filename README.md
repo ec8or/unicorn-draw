@@ -79,4 +79,10 @@ If you prefer Docker, use `Dockerfile.app`:
 - **Expose port**: `8080`
 - **Persistent storage**: Mount a volume to `/data`
 
+## Micropython Examples
+
+See the [`examples/`](./examples/) directory for Micropython scripts to display drawings on hardware like the Pimoroni Cosmic Unicorn.
+
+The example script (`examples/cosmic_unicorn.py`) fetches the shared drawing from your server and displays it on a 32×32 LED matrix, updating every few seconds.
+
 
