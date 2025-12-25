@@ -1,0 +1,13 @@
+{
+  "name": "unicorn-draw",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "32×32 pixel paint program with shared drawing",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
+

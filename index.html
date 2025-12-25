@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>unicorn-draw — 32×32</title>
+    <meta name="description" content="Super simple 32×32 pixel painter." />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <h1>unicorn-draw</h1>
+          <small>32×32 pixels</small>
+        </div>
+        <div class="row">
+          <span class="badge">Draw</span>
+          <a class="badge" href="/read.html">Read mode</a>
+        </div>
+      </header>
+
+      <div class="grid">
+        <div class="panel canvasWrap">
+          <canvas id="c" class="pixelCanvas" width="32" height="32" aria-label="32 by 32 pixel canvas"></canvas>
+        </div>
+
+        <div class="panel">
+          <div class="controls">
+            <div class="row">
+              <label for="color">Color</label>
+              <input id="color" type="color" value="#ffffff" />
+              <button id="fill" class="primary" type="button">Fill</button>
+              <button id="clear" class="danger" type="button">Clear</button>
+            </div>
+
+            <div class="row">
+              <button id="export" type="button">Download JSON</button>
+              <button id="import" type="button">Import JSON</button>
+              <input id="file" type="file" accept="application/json" hidden />
+            </div>
+
+            <div class="row">
+              <button id="copyLink" class="primary" type="button">Copy share link</button>
+            </div>
+
+            <div class="row">
+              <button id="load" class="primary" type="button">Load (shared latest)</button>
+              <button id="save" type="button">Save (shared latest)</button>
+            </div>
+
+            <div class="hint">
+              <div><span class="mono" id="status">Loading…</span></div>
+              <p>
+                Drag to draw. Share link encodes the drawing in the URL hash for <strong>read mode</strong>.
+                Your Pico can also fetch a static JSON (see <span class="mono">README</span>).
+              </p>
+            </div>
+
+            <div class="hint">
+              <div><strong>Share link</strong></div>
+              <div class="mono" style="word-break: break-all;">
+                <a id="shareLink" href="/read.html">/read.html</a>
+              </div>
+            </div>
+
+            <div class="hint">
+              <div><strong>Shared latest</strong></div>
+              <div class="mono" style="word-break: break-all;">
+                <a id="latestLink" href="/read.html?src=/api/latest">/read.html?src=/api/latest</a>
+              </div>
+            </div>
+
+            <div class="hint">
+              <div><strong>Payload (base64url)</strong></div>
+              <input id="out" class="out mono" type="text" readonly />
+            </div>
+          </div>
+
+          <footer>
+            Tip: open a share link on another device and it will render instantly.
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { initEditor } from "/app/editor.js";
+      initEditor();
+    </script>
+  </body>
+</html>
+
+
