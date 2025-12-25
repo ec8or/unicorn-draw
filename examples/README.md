@@ -21,9 +21,21 @@ Fetches the shared drawing from your deployed server and displays it on the Cosm
      - `network` (built-in)
      - `urequests` (install via Thonny or manually)
 
-3. **Configure WiFi** (if needed):
+3. **Configure WiFi** (required):
    - Your Pico needs to be connected to WiFi to fetch from the server
-   - Use your preferred method to configure network credentials
+   - **Option A**: Run `wifi_setup.py` once (edit it with your WiFi credentials first)
+   - **Option B**: Add WiFi credentials to `cosmic_unicorn.py` and uncomment the auto-connect code
+   - **Option C**: Use your own WiFi connection method
+   
+   Example with `wifi_setup.py`:
+   ```python
+   # Edit wifi_setup.py and set:
+   WIFI_SSID = "your-wifi-name"
+   WIFI_PASSWORD = "your-wifi-password"
+   
+   # Then run it once:
+   # python wifi_setup.py
+   ```
 
 ### Usage
 
