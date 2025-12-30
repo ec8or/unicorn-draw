@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>pin bfdi is pretty — View</title>
+    <meta name="description" content="View a pixel artwork." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="brand">
+          <h1>pin bfdi is pretty</h1>
+          <small>View</small>
+        </div>
+        <div class="row">
+          <a class="badge" href="/index.html">Draw</a>
+          <a class="badge" href="/gallery.html">Gallery</a>
+        </div>
+      </header>
+
+      <div class="grid">
+        <div class="panel canvasWrap">
+          <canvas id="c" class="pixelCanvas" width="32" height="32" aria-label="32 by 32 pixel canvas"></canvas>
+        </div>
+
+        <div class="panel">
+          <div class="controls">
+            <div id="artwork-info" class="hint">
+              <div><span class="mono" id="status">Loading…</span></div>
+            </div>
+            <div class="row" style="margin-top: 16px;">
+              <a href="/gallery.html" class="badge">← Back to Gallery</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { initViewer } from "/app/viewer.js";
+      initViewer();
+    </script>
+  </body>
+</html>
+

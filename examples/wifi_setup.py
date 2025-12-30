@@ -9,7 +9,7 @@ import time
 
 def connect_wifi(ssid, password, timeout=30):
     """
-    Connect to WiFi network.
+    Connect to WiFi network with reset capability.
     
     Args:
         ssid: WiFi network name
@@ -20,12 +20,23 @@ def connect_wifi(ssid, password, timeout=30):
         True if connected, False otherwise
     """
     wlan = network.WLAN(network.STA_IF)
-    wlan.active(True)
     
     if wlan.isconnected():
         print(f"Already connected to: {wlan.config('ssid')}")
         print(f"IP address: {wlan.ifconfig()[0]}")
         return True
+    
+    # Reset WiFi if it's in a bad state
+    try:
+        wlan.disconnect()
+        time.sleep(0.5)
+    except:
+        pass
+    
+    wlan.active(False)
+    time.sleep(0.5)
+    wlan.active(True)
+    time.sleep(0.5)
     
     print(f"Connecting to WiFi: {ssid}...")
     wlan.connect(ssid, password)

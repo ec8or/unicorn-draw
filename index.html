@@ -2,21 +2,25 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>unicorn-draw — 32×32</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+    <title>pin bfdi is pretty — 32×32</title>
     <meta name="description" content="Super simple 32×32 pixel painter." />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/styles.css" />
+    <script src="https://unpkg.com/lucide@latest"></script>
   </head>
   <body>
     <div class="wrap">
       <header>
         <div class="brand">
-          <h1>unicorn-draw</h1>
+          <h1>pin bfdi is pretty</h1>
           <small>32×32 pixels</small>
         </div>
         <div class="row">
           <span class="badge">Draw</span>
-          <a class="badge" href="/read.html">Read mode</a>
+          <a class="badge" href="/gallery.html">Gallery</a>
         </div>
       </header>
 
@@ -28,58 +32,43 @@
         <div class="panel">
           <div class="controls">
             <div class="row">
-              <label for="color">Color</label>
-              <input id="color" type="color" value="#ffffff" />
-              <button id="fill" class="primary" type="button">Fill</button>
-              <button id="clear" class="danger" type="button">Clear</button>
+              <button id="draw" type="button" class="tool-btn active" title="Draw">
+                <i data-lucide="pen-tool"></i>
+              </button>
+              <button id="fill" type="button" class="tool-btn" title="Fill">
+                <i data-lucide="paint-bucket"></i>
+              </button>
+              <button id="undo" type="button" class="tool-btn" title="Undo">
+                <i data-lucide="undo-2"></i>
+              </button>
+              <button id="redo" type="button" class="tool-btn" title="Redo">
+                <i data-lucide="redo-2"></i>
+              </button>
+              <button id="clear" type="button" class="tool-btn danger" title="Clear">
+                <i data-lucide="trash-2"></i>
+              </button>
+            </div>
+
+            <div class="palette-container">
+              <div id="palette" class="palette"></div>
             </div>
 
             <div class="row">
-              <button id="export" type="button">Download JSON</button>
-              <button id="import" type="button">Import JSON</button>
-              <input id="file" type="file" accept="application/json" hidden />
+              <label for="artist">Your name</label>
+              <input id="artist" type="text" placeholder="Enter your name" required />
             </div>
 
             <div class="row">
-              <button id="copyLink" class="primary" type="button">Copy share link</button>
-            </div>
-
-            <div class="row">
-              <button id="load" class="primary" type="button">Load (shared latest)</button>
-              <button id="save" type="button">Save (shared latest)</button>
+              <button id="submit" class="primary" type="button">Submit Artwork</button>
             </div>
 
             <div class="hint">
               <div><span class="mono" id="status">Loading…</span></div>
               <p>
-                Drag to draw. Share link encodes the drawing in the URL hash for <strong>read mode</strong>.
-                Your Pico can also fetch a static JSON (see <span class="mono">README</span>).
+                Drag to draw. Click a color from the palette to select it.
               </p>
             </div>
-
-            <div class="hint">
-              <div><strong>Share link</strong></div>
-              <div class="mono" style="word-break: break-all;">
-                <a id="shareLink" href="/read.html">/read.html</a>
-              </div>
-            </div>
-
-            <div class="hint">
-              <div><strong>Shared latest</strong></div>
-              <div class="mono" style="word-break: break-all;">
-                <a id="latestLink" href="/read.html?src=/api/latest">/read.html?src=/api/latest</a>
-              </div>
-            </div>
-
-            <div class="hint">
-              <div><strong>Payload (base64url)</strong></div>
-              <input id="out" class="out mono" type="text" readonly />
-            </div>
           </div>
-
-          <footer>
-            Tip: open a share link on another device and it will render instantly.
-          </footer>
         </div>
       </div>
     </div>
