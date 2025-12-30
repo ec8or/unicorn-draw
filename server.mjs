@@ -15,6 +15,54 @@ const API_SECRET = process.env.API_SECRET || "06911ead4a05f7b5ee1ac68379a7e819af
 
 const PUBLIC_ROOT = __dirname; // serve repo root as static files
 
+// Rate limiting: track submissions per IP
+const rateLimit = new Map();
+const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX = 10; // max submissions per window
+
+function getClientIp(req) {
+  return req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || 
+         req.headers["x-real-ip"] || 
+         req.socket.remoteAddress || 
+         "unknown";
+}
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const record = rateLimit.get(ip);
+  
+  if (!record || now - record.firstRequest > RATE_LIMIT_WINDOW) {
+    rateLimit.set(ip, { firstRequest: now, count: 1 });
+    return true;
+  }
+  
+  if (record.count >= RATE_LIMIT_MAX) {
+    return false;
+  }
+  
+  record.count++;
+  return true;
+}
+
+// Clean up old rate limit entries periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, record] of rateLimit.entries()) {
+    if (now - record.firstRequest > RATE_LIMIT_WINDOW) {
+      rateLimit.delete(ip);
+    }
+  }
+}, RATE_LIMIT_WINDOW);
+
+function sanitizeString(str, maxLength = 100) {
+  if (typeof str !== "string") return "";
+  // Remove control characters, trim, and limit length
+  return str
+    .replace(/[\x00-\x1F\x7F]/g, "")
+    .trim()
+    .slice(0, maxLength);
+}
+
 function noStore(res) {
   res.setHeader("Cache-Control", "no-store, max-age=0");
 }
@@ -51,7 +99,9 @@ async function readArtworks() {
 
 async function writeArtworks(artworks) {
   await ensureDataDir();
-  await fs.writeFile(ARTWORKS_PATH, JSON.stringify(artworks, null, 2) + "\n", "utf-8");
+  // Limit total artworks to prevent disk exhaustion (keep last 1000)
+  const limited = artworks.slice(-1000);
+  await fs.writeFile(ARTWORKS_PATH, JSON.stringify(limited, null, 2) + "\n", "utf-8");
 }
 
 async function readDisplayState() {
@@ -73,14 +123,29 @@ function generateId() {
 }
 
 function looksLikeDrawingJson(d) {
-  return (
-    d &&
-    d.w === 32 &&
-    d.h === 32 &&
-    Array.isArray(d.palette) &&
-    Array.isArray(d.pixels) &&
-    d.pixels.length === 1024
-  );
+  if (!d || typeof d !== "object") return false;
+  if (d.w !== 32 || d.h !== 32) return false;
+  if (!Array.isArray(d.palette) || !Array.isArray(d.pixels)) return false;
+  if (d.pixels.length !== 1024) return false;
+  
+  // Validate palette: must be array of valid hex colors
+  if (d.palette.length > 256) return false;
+  for (const color of d.palette) {
+    if (typeof color !== "string" || !/^#[0-9a-fA-F]{6}$/.test(color)) {
+      return false;
+    }
+  }
+  
+  // Validate pixels: must be numbers within palette range
+  const maxPaletteIndex = d.palette.length - 1;
+  for (const pixel of d.pixels) {
+    const idx = Number(pixel);
+    if (!Number.isInteger(idx) || idx < 0 || idx > maxPaletteIndex) {
+      return false;
+    }
+  }
+  
+  return true;
 }
 
 async function handleApi(req, res) {
@@ -118,19 +183,35 @@ async function handleApi(req, res) {
 
   // POST /api/submit - Submit new artwork
   if (pathname === "/api/submit" && req.method === "POST") {
+    const clientIp = getClientIp(req);
+    
+    // Rate limiting
+    if (!checkRateLimit(clientIp)) {
+      return send(res, 429, JSON.stringify({ error: "rate limit exceeded" }) + "\n", "application/json; charset=utf-8");
+    }
+    
     try {
       const raw = await readBody(req);
       const body = JSON.parse(raw);
-      if (!body.artist || typeof body.artist !== "string" || body.artist.trim().length === 0) {
+      
+      // Validate and sanitize artist name
+      if (!body.artist || typeof body.artist !== "string") {
         return send(res, 400, JSON.stringify({ error: "artist name required" }) + "\n", "application/json; charset=utf-8");
       }
+      
+      const sanitizedArtist = sanitizeString(body.artist, 50);
+      if (sanitizedArtist.length === 0) {
+        return send(res, 400, JSON.stringify({ error: "artist name required" }) + "\n", "application/json; charset=utf-8");
+      }
+      
       if (!looksLikeDrawingJson(body.drawing)) {
         return send(res, 400, JSON.stringify({ error: "invalid drawing shape" }) + "\n", "application/json; charset=utf-8");
       }
+      
       const artworks = await readArtworks();
       const artwork = {
         id: generateId(),
-        artist: body.artist.trim(),
+        artist: sanitizedArtist,
         created_at: Date.now(),
         display_count: 0,
         drawing: body.drawing,
@@ -140,6 +221,7 @@ async function handleApi(req, res) {
       noStore(res);
       return send(res, 200, JSON.stringify({ ok: true, id: artwork.id }) + "\n", "application/json; charset=utf-8");
     } catch (e) {
+      // Don't leak error details
       return send(res, 400, JSON.stringify({ error: "bad request" }) + "\n", "application/json; charset=utf-8");
     }
   }
@@ -151,7 +233,7 @@ async function handleApi(req, res) {
       const gallery = artworks
         .map((a) => ({
           id: a.id,
-          artist: a.artist,
+          artist: sanitizeString(a.artist || "Anonymous", 50), // Sanitize on output too
           created_at: a.created_at,
           display_count: a.display_count,
         }))
@@ -167,11 +249,20 @@ async function handleApi(req, res) {
   if (pathname.startsWith("/api/artwork/") && req.method === "GET") {
     try {
       const id = pathname.slice("/api/artwork/".length);
+      // Validate ID format (alphanumeric, reasonable length)
+      if (!/^[a-z0-9]{1,30}$/i.test(id)) {
+        return send(res, 400, JSON.stringify({ error: "invalid id" }) + "\n", "application/json; charset=utf-8");
+      }
+      
       const artworks = await readArtworks();
       const artwork = artworks.find((a) => a.id === id);
       if (!artwork) {
         return send(res, 404, JSON.stringify({ error: "not found" }) + "\n", "application/json; charset=utf-8");
       }
+      
+      // Sanitize artist name on output
+      artwork.artist = sanitizeString(artwork.artist || "Anonymous", 50);
+      
       noStore(res);
       return send(res, 200, JSON.stringify(artwork) + "\n", "application/json; charset=utf-8");
     } catch (e) {
@@ -191,6 +282,10 @@ async function handleApi(req, res) {
       if (!artwork) {
         return send(res, 404, JSON.stringify({ error: "current artwork not found" }) + "\n", "application/json; charset=utf-8");
       }
+      
+      // Sanitize artist name on output
+      artwork.artist = sanitizeString(artwork.artist || "Anonymous", 50);
+      
       noStore(res);
       return send(res, 200, JSON.stringify(artwork) + "\n", "application/json; charset=utf-8");
     } catch (e) {
@@ -234,7 +329,12 @@ async function handleApi(req, res) {
 function safeResolve(root, urlPath) {
   const clean = decodeURIComponent(urlPath.split("?")[0]);
   const p = path.normalize(clean).replace(/^(\.\.(\/|\\|$))+/, "");
-  return path.join(root, p);
+  const resolved = path.join(root, p);
+  // Ensure resolved path is still within root directory
+  if (!resolved.startsWith(path.resolve(root))) {
+    return null;
+  }
+  return resolved;
 }
 
 async function serveStatic(req, res) {
@@ -257,6 +357,10 @@ async function serveStatic(req, res) {
   }
 
   const filePath = safeResolve(PUBLIC_ROOT, pathname);
+  if (!filePath) {
+    return send(res, 403, "forbidden\n");
+  }
+  
   try {
     const st = await fs.stat(filePath);
     if (st.isDirectory()) {
@@ -283,19 +387,38 @@ async function serveStatic(req, res) {
 }
 
 const server = http.createServer(async (req, res) => {
-  // basic security headers
+  // Enhanced security headers
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
   res.setHeader("Referrer-Policy", "no-referrer");
-
-  const apiHandled = await handleApi(req, res);
-  if (apiHandled !== false) return;
-  return serveStatic(req, res);
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:;");
+  
+  // Request timeout (30 seconds)
+  const timeout = setTimeout(() => {
+    if (!res.headersSent) {
+      res.statusCode = 408;
+      res.end("Request timeout\n");
+    }
+  }, 30000);
+  
+  try {
+    const apiHandled = await handleApi(req, res);
+    if (apiHandled !== false) {
+      clearTimeout(timeout);
+      return;
+    }
+    await serveStatic(req, res);
+    clearTimeout(timeout);
+  } catch (e) {
+    clearTimeout(timeout);
+    if (!res.headersSent) {
+      send(res, 500, "Internal server error\n");
+    }
+  }
 });
 
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`unicorn-draw listening on :${PORT}`);
   console.log(`DATA_DIR=${DATA_DIR}`);
 });
-
-

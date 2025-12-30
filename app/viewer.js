@@ -28,16 +28,22 @@ function renderArtworkInfo(artwork) {
   const infoEl = $("#artwork-info");
   if (!infoEl) return;
 
-  infoEl.innerHTML = `
-    <div style="margin-bottom: 12px;">
-      <div style="font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px;">
-        ${artwork.artist || "Anonymous"}
-      </div>
-      <div style="font-size: 12px; color: var(--muted);">
-        ${formatDate(artwork.created_at)}
-      </div>
-    </div>
-  `;
+  // Use textContent to prevent XSS
+  const artistDiv = document.createElement("div");
+  artistDiv.style.cssText = "font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px;";
+  artistDiv.textContent = artwork.artist || "Anonymous";
+  
+  const dateDiv = document.createElement("div");
+  dateDiv.style.cssText = "font-size: 12px; color: var(--muted);";
+  dateDiv.textContent = formatDate(artwork.created_at);
+  
+  const container = document.createElement("div");
+  container.style.cssText = "margin-bottom: 12px;";
+  container.appendChild(artistDiv);
+  container.appendChild(dateDiv);
+  
+  infoEl.innerHTML = "";
+  infoEl.appendChild(container);
 }
 
 export async function initViewer() {
