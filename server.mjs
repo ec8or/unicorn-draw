@@ -342,6 +342,11 @@ async function serveStatic(req, res) {
   let pathname = url.pathname;
   if (pathname === "/") pathname = "/index.html";
 
+  // Don't serve Python files or examples directory
+  if (pathname.startsWith("/examples/") || pathname.endsWith(".py")) {
+    return send(res, 404, "not found\n");
+  }
+
   // Back-compat: allow read mode to fetch the same JSON via a stable path.
   if (pathname === "/drawings/latest.json") {
     try {
