@@ -9,6 +9,14 @@ import urequests
 from cosmic import CosmicUnicorn
 from picographics import PicoGraphics, DISPLAY_COSMIC_UNICORN as DISPLAY
 
+# Try to import audio (optional - may not be available)
+try:
+    from audio import WavPlayer
+    AUDIO_AVAILABLE = True
+except ImportError:
+    AUDIO_AVAILABLE = False
+    WavPlayer = None
+
 # Configuration - UPDATE THESE
 SSID = "YOUR_WIFI_SSID"
 PASSWORD = "YOUR_WIFI_PASSWORD"
@@ -25,6 +33,28 @@ graphics = PicoGraphics(DISPLAY)
 brightness = 0.5
 cosmic.set_brightness(brightness)
 print("Display ready")
+
+# Initialize audio player (if available)
+# GPIO pins: left=0, right=10, data=11, clock=9, amp_enable=22
+sound = None
+if AUDIO_AVAILABLE:
+    try:
+        sound = WavPlayer(0, 10, 11, 9, amp_enable=22)
+        print("Audio initialized")
+    except Exception as e:
+        print(f"Audio initialization failed: {e}")
+        sound = None
+else:
+    print("Audio module not available - sound disabled")
+
+def play_cheer():
+    """Play the cheer sound effect"""
+    if AUDIO_AVAILABLE and sound:
+        try:
+            sound.play_wav("cheer.wav", False)
+            # Don't block - let it play in background
+        except Exception as e:
+            print(f"Error playing sound: {e}")
 
 def hex_to_rgb(hex_color):
     """Convert hex color to RGB tuple"""
@@ -119,6 +149,7 @@ print("Fetching initial artwork...")
 current_artwork = fetch_next_artwork()
 if current_artwork and "drawing" in current_artwork:
     draw_artwork(current_artwork["drawing"])
+    play_cheer()
     print(f"Displaying artwork by {current_artwork.get('artist', 'Unknown')}")
 else:
     print("No artwork available")
@@ -127,30 +158,40 @@ else:
 # Main loop
 sleep = False
 was_sleep_pressed = False
+was_a_pressed = False
+was_b_pressed = False
+was_c_pressed = False
+was_d_pressed = False
 last_auto_update = time.time()
 auto_update_interval = 300  # Auto-update every 5 minutes (300 seconds)
-button_pressed_time = 0
 
 while True:
-    # Check for button presses
+    # Check for button presses with edge detection
     btn = pressed()
+    a_pressed = (btn == CosmicUnicorn.SWITCH_A)
+    b_pressed = (btn == CosmicUnicorn.SWITCH_B)
+    c_pressed = (btn == CosmicUnicorn.SWITCH_C)
+    d_pressed = (btn == CosmicUnicorn.SWITCH_D)
     
-    # A button: manually cycle to next artwork
-    if btn == CosmicUnicorn.SWITCH_A:
-        if time.time() - button_pressed_time > 0.5:  # Debounce
-            print("A button pressed - fetching next artwork...")
-            next_artwork = fetch_next_artwork()
-            if next_artwork and "drawing" in next_artwork:
-                draw_artwork(next_artwork["drawing"])
-                current_artwork = next_artwork
-                print(f"Displaying artwork by {next_artwork.get('artist', 'Unknown')}")
-                last_auto_update = time.time()  # Reset auto-update timer
-            button_pressed_time = time.time()
+    # A button: manually cycle to next artwork (only on press, not while held)
+    if a_pressed and not was_a_pressed:
+        print("A button pressed - fetching next artwork...")
+        next_artwork = fetch_next_artwork()
+        if next_artwork and "drawing" in next_artwork:
+            draw_artwork(next_artwork["drawing"])
+            play_cheer()
+            current_artwork = next_artwork
+            print(f"Displaying artwork by {next_artwork.get('artist', 'Unknown')}")
+            last_auto_update = time.time()  # Reset auto-update timer
+    was_a_pressed = a_pressed
     
-    # B, C, D buttons: reset device
-    if btn in (CosmicUnicorn.SWITCH_B, CosmicUnicorn.SWITCH_C, CosmicUnicorn.SWITCH_D):
+    # B, C, D buttons: reset device (only on press, not while held)
+    if (b_pressed and not was_b_pressed) or (c_pressed and not was_c_pressed) or (d_pressed and not was_d_pressed):
         print("Reset button pressed")
         machine.reset()
+    was_b_pressed = b_pressed
+    was_c_pressed = c_pressed
+    was_d_pressed = d_pressed
     
     # Sleep button toggle
     sleep_pressed = cosmic.is_pressed(CosmicUnicorn.SWITCH_SLEEP)
@@ -180,6 +221,7 @@ while True:
             next_artwork = fetch_next_artwork()
             if next_artwork and "drawing" in next_artwork:
                 draw_artwork(next_artwork["drawing"])
+                play_cheer()
                 current_artwork = next_artwork
                 print(f"Displaying artwork by {next_artwork.get('artist', 'Unknown')}")
             last_auto_update = time.time()

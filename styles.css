@@ -87,6 +87,13 @@ header {
   aspect-ratio: 1 / 1;
   touch-action: none;
   user-select: none;
+  /* Add grid border effect using box-shadow */
+  box-shadow: 
+    inset 0 0 0 1px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(0, 0, 0, 0.1);
+  /* Alternative: use outline for pixel borders */
+  outline: 1px solid rgba(0, 0, 0, 0.2);
+  outline-offset: -1px;
 }
 
 .controls {
