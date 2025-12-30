@@ -1,53 +1,48 @@
-# Micropython Examples
+# Cosmic Unicorn Examples
 
-Example scripts for displaying unicorn-draw drawings on Pimoroni Cosmic Unicorn (32×32 LED matrix).
+Example scripts for displaying pixel art from the gallery on Pimoroni Cosmic Unicorn (32×32 LED matrix).
 
-## cosmic_unicorn.py
+## Gallery Display (`gallery_display.py`)
 
-Fetches the shared drawing from your deployed server and displays it on the Cosmic Unicorn.
+Main script for displaying artworks from the gallery. This script:
+
+- Fetches artworks from the `/api/next` endpoint
+- Displays them on the Cosmic Unicorn
+- Auto-updates every 5 minutes
+- Allows manual cycling with A button press
+- Supports brightness controls and sleep mode
 
 ### Setup
 
-1. **Update the server URL** in `cosmic_unicorn.py`:
+1. **Update configuration** in `gallery_display.py`:
    ```python
-   SERVER_URL = "http://your-server.com"  # Change this!
+   SSID = "YOUR_WIFI_SSID"
+   PASSWORD = "YOUR_WIFI_PASSWORD"
+   API_URL = "http://your-server.com"  # Your server URL
+   API_SECRET = "your-secret-here"  # From server environment or hardcoded fallback
    ```
 
-2. **Copy to your Pico**:
-   - Upload `cosmic_unicorn.py` to your Raspberry Pi Pico
-   - Ensure you have the required libraries installed:
-     - `cosmic` (from Pimoroni)
-     - `picographics` (from Pimoroni)
-     - `network` (built-in)
-     - `urequests` (install via Thonny or manually)
+2. **Upload to Pico**:
+   - Copy `gallery_display.py` to your Pico
+   - Make sure you have `cosmic.py` and `picographics` library installed
+   - Run the script
 
-3. **Configure WiFi** (required):
-   - Your Pico needs to be connected to WiFi to fetch from the server
-   - **Option A**: Run `wifi_setup.py` once (edit it with your WiFi credentials first)
-   - **Option B**: Add WiFi credentials to `cosmic_unicorn.py` and uncomment the auto-connect code
-   - **Option C**: Use your own WiFi connection method
-   
-   Example with `wifi_setup.py`:
-   ```python
-   # Edit wifi_setup.py and set:
-   WIFI_SSID = "your-wifi-name"
-   WIFI_PASSWORD = "your-wifi-password"
-   
-   # Then run it once:
-   # python wifi_setup.py
-   ```
+### Controls
 
-### Usage
+- **A button**: Manually cycle to next artwork
+- **B/C/D buttons**: Reset device
+- **Brightness Up/Down**: Adjust display brightness
+- **Sleep button**: Toggle sleep mode (fades display)
 
-Run the script on your Pico. It will:
-- Fetch the latest drawing from `/api/latest` every 2 seconds
-- Fall back to `/drawings/latest.json` if the API endpoint isn't available
-- Display the drawing on the Cosmic Unicorn
-- Handle errors gracefully (shows last known drawing on network errors)
+### Features
 
-### Customization
+- **Auto-update**: Fetches new artwork every 5 minutes automatically
+- **Manual cycling**: Press A button to immediately fetch next artwork
+- **Error handling**: Shows error pattern if connection fails
+- **WiFi reconnection**: Handles WiFi connection with timeout
 
-- **Update interval**: Change `UPDATE_INTERVAL` (default: 2.0 seconds)
-- **Error handling**: Modify the fallback behavior in `fetch_drawing()`
-- **Display behavior**: Adjust what happens when no drawing is available
+## Other Examples
 
+- `cosmic_unicorn.py` - Legacy example for fetching from `/api/latest`
+- `display_test.py` - Test script with hardcoded data
+- `wifi_setup.py` - WiFi connection helper functions
