@@ -7,7 +7,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PORT = Number(process.env.PORT || 8080);
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "data");
+// Default to /data in container environments, otherwise use ./data relative to server
+const DATA_DIR = process.env.DATA_DIR || (process.env.NODE_ENV === "production" ? "/data" : path.join(__dirname, "data"));
 const LATEST_PATH = path.join(DATA_DIR, "latest.json");
 const ARTWORKS_PATH = path.join(DATA_DIR, "artworks.json");
 const DISPLAY_STATE_PATH = path.join(DATA_DIR, "display_state.json");
@@ -86,6 +87,14 @@ async function readBody(req, limitBytes = 200_000) {
 
 async function ensureDataDir() {
   await fs.mkdir(DATA_DIR, { recursive: true });
+  // Verify we can write to the directory
+  try {
+    const testFile = path.join(DATA_DIR, ".write-test");
+    await fs.writeFile(testFile, "test", "utf-8");
+    await fs.unlink(testFile);
+  } catch (e) {
+    console.error(`WARNING: Cannot write to DATA_DIR=${DATA_DIR}: ${e.message}`);
+  }
 }
 
 async function readArtworks() {
@@ -427,7 +436,23 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, "0.0.0.0", () => {
-  console.log(`unicorn-draw listening on :${PORT}`);
-  console.log(`DATA_DIR=${DATA_DIR}`);
+// Initialize data directory on startup
+ensureDataDir().then(() => {
+  // Warn if DATA_DIR is inside the app directory (will be lost on redeploy)
+  const dataDirNormalized = path.resolve(DATA_DIR);
+  const appDirNormalized = path.resolve(__dirname);
+  if (dataDirNormalized.startsWith(appDirNormalized + path.sep) || dataDirNormalized === appDirNormalized) {
+    console.warn(`WARNING: DATA_DIR=${DATA_DIR} is inside the app directory!`);
+    console.warn(`This data will be LOST on redeploy. Set DATA_DIR=/data and mount a volume to /data in Coolify.`);
+  }
+  
+  server.listen(PORT, "0.0.0.0", () => {
+    console.log(`unicorn-draw listening on :${PORT}`);
+    console.log(`DATA_DIR=${DATA_DIR}`);
+    console.log(`ARTWORKS_PATH=${ARTWORKS_PATH}`);
+    console.log(`DISPLAY_STATE_PATH=${DISPLAY_STATE_PATH}`);
+  });
+}).catch((e) => {
+  console.error(`Failed to initialize data directory: ${e.message}`);
+  process.exit(1);
 });
