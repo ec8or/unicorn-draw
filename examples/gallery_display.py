@@ -149,7 +149,9 @@ print("Fetching initial artwork...")
 current_artwork = fetch_next_artwork()
 if current_artwork and "drawing" in current_artwork:
     draw_artwork(current_artwork["drawing"])
-    play_cheer()
+    # Only play cheer for new artwork (display_count <= 1)
+    if current_artwork.get("display_count", 0) <= 1:
+        play_cheer()
     print(f"Displaying artwork by {current_artwork.get('artist', 'Unknown')}")
 else:
     print("No artwork available")
@@ -179,7 +181,9 @@ while True:
         next_artwork = fetch_next_artwork()
         if next_artwork and "drawing" in next_artwork:
             draw_artwork(next_artwork["drawing"])
-            play_cheer()
+            # Only play cheer for new artwork (display_count <= 1)
+            if next_artwork.get("display_count", 0) <= 1:
+                play_cheer()
             current_artwork = next_artwork
             print(f"Displaying artwork by {next_artwork.get('artist', 'Unknown')}")
             last_auto_update = time.time()  # Reset auto-update timer
@@ -221,7 +225,9 @@ while True:
             next_artwork = fetch_next_artwork()
             if next_artwork and "drawing" in next_artwork:
                 draw_artwork(next_artwork["drawing"])
-                play_cheer()
+                # Only play cheer for new artwork (display_count <= 1)
+                if next_artwork.get("display_count", 0) <= 1:
+                    play_cheer()
                 current_artwork = next_artwork
                 print(f"Displaying artwork by {next_artwork.get('artist', 'Unknown')}")
             last_auto_update = time.time()

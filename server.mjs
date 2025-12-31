@@ -316,8 +316,12 @@ async function handleApi(req, res) {
       await writeArtworks(artworks);
       const state = { current_id: next.id };
       await writeDisplayState(state);
+      
+      // Calculate total views across all artworks
+      const totalViews = artworks.reduce((sum, a) => sum + a.display_count, 0);
+      
       noStore(res);
-      return send(res, 200, JSON.stringify(next) + "\n", "application/json; charset=utf-8");
+      return send(res, 200, JSON.stringify({ ...next, total_views: totalViews }) + "\n", "application/json; charset=utf-8");
     } catch (e) {
       return send(res, 500, JSON.stringify({ error: "server error" }) + "\n", "application/json; charset=utf-8");
     }
