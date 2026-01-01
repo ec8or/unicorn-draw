@@ -336,6 +336,43 @@ async function handleApi(req, res) {
     }
   }
 
+  // DELETE /api/artwork/:id?secret=xxx - Delete artwork (password protected)
+  if (pathname.startsWith("/api/artwork/") && req.method === "DELETE") {
+    try {
+      const secret = url.searchParams.get("secret");
+      if (secret !== API_SECRET) {
+        return send(res, 401, JSON.stringify({ error: "unauthorized" }) + "\n", "application/json; charset=utf-8");
+      }
+      
+      const id = pathname.slice("/api/artwork/".length);
+      // Validate ID format (alphanumeric, reasonable length)
+      if (!/^[a-z0-9]{1,30}$/i.test(id)) {
+        return send(res, 400, JSON.stringify({ error: "invalid id" }) + "\n", "application/json; charset=utf-8");
+      }
+      
+      const artworks = await readArtworks();
+      const index = artworks.findIndex((a) => a.id === id);
+      if (index === -1) {
+        return send(res, 404, JSON.stringify({ error: "not found" }) + "\n", "application/json; charset=utf-8");
+      }
+      
+      // Remove the artwork
+      artworks.splice(index, 1);
+      await writeArtworks(artworks);
+      
+      // If this was the current artwork, clear the display state
+      const state = await readDisplayState();
+      if (state.current_id === id) {
+        await writeDisplayState({ current_id: null });
+      }
+      
+      noStore(res);
+      return send(res, 200, JSON.stringify({ ok: true, deleted: id }) + "\n", "application/json; charset=utf-8");
+    } catch (e) {
+      return send(res, 500, JSON.stringify({ error: "server error" }) + "\n", "application/json; charset=utf-8");
+    }
+  }
+
   return false;
 }
 
