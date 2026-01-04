@@ -313,24 +313,64 @@ async function handleApi(req, res) {
       if (artworks.length === 0) {
         return send(res, 404, JSON.stringify({ error: "no artworks available" }) + "\n", "application/json; charset=utf-8");
       }
-      // Fair rotation: pick artwork with lowest display_count, on tie pick oldest created_at
-      artworks.sort((a, b) => {
-        if (a.display_count !== b.display_count) {
-          return a.display_count - b.display_count;
+      
+      // Get current artwork to exclude it from selection
+      const state = await readDisplayState();
+      const currentId = state.current_id;
+      
+      // Filter out current artwork if there are other options
+      let candidates = artworks;
+      if (currentId && artworks.length > 1) {
+        candidates = artworks.filter(a => a.id !== currentId);
+      }
+      
+      // First priority: guarantee slot for artworks with 0 views (new submissions)
+      const zeroViewArtworks = candidates.filter(a => (a.display_count || 0) === 0);
+      let next;
+      
+      if (zeroViewArtworks.length > 0) {
+        // If multiple zero-view artworks, pick oldest (first submitted)
+        zeroViewArtworks.sort((a, b) => a.created_at - b.created_at);
+        next = zeroViewArtworks[0];
+      } else {
+        // Weighted random selection: cap display_count at 10, weight = 1 / (capped_count + 1)
+        const DISPLAY_COUNT_CAP = 10;
+        const weights = candidates.map(artwork => {
+          const cappedCount = Math.min(artwork.display_count || 0, DISPLAY_COUNT_CAP);
+          return 1 / (cappedCount + 1);
+        });
+        
+        // Calculate cumulative weights for random selection
+        const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+        let random = Math.random() * totalWeight;
+        
+        let selectedIndex = 0;
+        for (let i = 0; i < weights.length; i++) {
+          random -= weights[i];
+          if (random <= 0) {
+            selectedIndex = i;
+            break;
+          }
         }
-        return a.created_at - b.created_at;
-      });
-      const next = artworks[0];
-      next.display_count++;
+        
+        next = candidates[selectedIndex];
+      }
+      next.display_count = (next.display_count || 0) + 1;
       await writeArtworks(artworks);
-      const state = { current_id: next.id };
-      await writeDisplayState(state);
+      const newState = { current_id: next.id };
+      await writeDisplayState(newState);
       
       // Calculate total views across all artworks
-      const totalViews = artworks.reduce((sum, a) => sum + a.display_count, 0);
+      const totalViews = artworks.reduce((sum, a) => sum + (a.display_count || 0), 0);
+      
+      // Check if we're in quiet hours (23:00 - 07:00 British time)
+      const now = new Date();
+      const britishTime = new Date(now.toLocaleString("en-US", { timeZone: "Europe/London" }));
+      const hour = britishTime.getHours();
+      const quietHours = hour >= 23 || hour < 7;
       
       noStore(res);
-      return send(res, 200, JSON.stringify({ ...next, total_views: totalViews }) + "\n", "application/json; charset=utf-8");
+      return send(res, 200, JSON.stringify({ ...next, total_views: totalViews, quiet_hours: quietHours }) + "\n", "application/json; charset=utf-8");
     } catch (e) {
       return send(res, 500, JSON.stringify({ error: "server error" }) + "\n", "application/json; charset=utf-8");
     }

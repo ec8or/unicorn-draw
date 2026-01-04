@@ -6,6 +6,7 @@ import time
 import machine
 import network
 import urequests
+import gc
 from cosmic import CosmicUnicorn
 from picographics import PicoGraphics, DISPLAY_COSMIC_UNICORN as DISPLAY
 
@@ -17,11 +18,18 @@ except ImportError:
     AUDIO_AVAILABLE = False
     WavPlayer = None
 
-# Configuration - UPDATE THESE
-SSID = "YOUR_WIFI_SSID"
-PASSWORD = "YOUR_WIFI_PASSWORD"
-API_URL = "http://your-server.com"  # Your server URL
-API_SECRET = "06911ead4a05f7b5ee1ac68379a7e819aff8c7902edc6a441eaa84bea32ea90f"  # Or set via env
+# Import configuration from config.py
+try:
+    from config import SSID, PASSWORD, API_URL, API_SECRET, REQUEST_TIMEOUT, WIFI_CONNECT_TIMEOUT, AUTO_UPDATE_INTERVAL
+except ImportError:
+    # Fallback defaults if config.py doesn't exist
+    SSID = "YOUR_WIFI_SSID"
+    PASSWORD = "YOUR_WIFI_PASSWORD"
+    API_URL = "http://your-server.com"
+    API_SECRET = "06911ead4a05f7b5ee1ac68379a7e819aff8c7902edc6a441eaa84bea32ea90f"
+    REQUEST_TIMEOUT = 10
+    WIFI_CONNECT_TIMEOUT = 20
+    AUTO_UPDATE_INTERVAL = 300
 
 # Overclock to 200MHz for better performance
 machine.freq(200000000)
@@ -34,27 +42,71 @@ brightness = 0.5
 cosmic.set_brightness(brightness)
 print("Display ready")
 
-# Initialize audio player (if available)
+# Audio player will be created on-demand in play_cheer() to avoid hardware state issues
 # GPIO pins: left=0, right=10, data=11, clock=9, amp_enable=22
 sound = None
 if AUDIO_AVAILABLE:
-    try:
-        sound = WavPlayer(0, 10, 11, 9, amp_enable=22)
-        print("Audio initialized")
-    except Exception as e:
-        print(f"Audio initialization failed: {e}")
-        sound = None
+    print("Audio module available")
 else:
     print("Audio module not available - sound disabled")
 
 def play_cheer():
     """Play the cheer sound effect"""
-    if AUDIO_AVAILABLE and sound:
+    global sound
+    
+    if not AUDIO_AVAILABLE:
+        return
+    
+    print("play_cheer: Starting")
+    
+    # Recreate WavPlayer each time to reset hardware state
+    # This prevents hanging on subsequent calls
+    try:
+        # Clean up old instance if it exists
+        if sound is not None:
+            try:
+                if hasattr(sound, 'stop'):
+                    sound.stop()
+            except:
+                pass
+            # Delete the old instance
+            del sound
+            sound = None
+        
+        # Force garbage collection to free resources
+        gc.collect()
+        time.sleep(0.1)
+        
+        print("play_cheer: Creating new WavPlayer")
+        # Create fresh WavPlayer instance
+        sound = WavPlayer(0, 10, 11, 9, amp_enable=22)
+        print("play_cheer: WavPlayer created")
+        
+        # Small delay to let hardware initialize
+        time.sleep(0.1)
+        
+        print("play_cheer: Calling play_wav")
+        # Play the sound (False = non-blocking)
+        sound.play_wav("Cheer.wav", False)
+        print("play_cheer: play_wav called successfully")
+        
+        # Small delay after starting playback
+        time.sleep(0.05)
+        
+    except MemoryError as e:
+        print(f"Memory error playing sound: {e}")
+        gc.collect()
+        sound = None
+    except Exception as e:
+        print(f"Error playing sound: {e}")
+        # Clean up on error
         try:
-            sound.play_wav("cheer.wav", False)
-            # Don't block - let it play in background
-        except Exception as e:
-            print(f"Error playing sound: {e}")
+            if sound is not None and hasattr(sound, 'stop'):
+                sound.stop()
+        except:
+            pass
+        sound = None
+        # Continue execution - don't let audio failure hang the device
 
 def hex_to_rgb(hex_color):
     """Convert hex color to RGB tuple"""
@@ -79,7 +131,7 @@ def draw_artwork(data):
         palette = data["palette"]
         pixels = data["pixels"]
         
-        # Create pens for palette
+        # Create pens for palette (reuse graphics context, no need to store)
         rgb_palette = [hex_to_rgb(c) for c in palette]
         pens = [graphics.create_pen(r, g, b) for r, g, b in rgb_palette]
         
@@ -92,28 +144,49 @@ def draw_artwork(data):
                     graphics.pixel(x, y)
         
         cosmic.update(graphics)
+        
+        # Clear pens list to free memory (pens are managed by graphics context)
+        del pens
+        del rgb_palette
+        gc.collect()
+        
         return True
     except Exception as e:
         print(f"Error drawing artwork: {e}")
+        gc.collect()
         return False
 
 def fetch_next_artwork():
     """Fetch next artwork from API"""
+    resp = None
     try:
+        # Force garbage collection before network request to free memory
+        gc.collect()
+        
         url = f"{API_URL}/api/next?secret={API_SECRET}"
         print(f"Fetching: {url}")
-        resp = urequests.get(url, timeout=10)
+        resp = urequests.get(url, timeout=REQUEST_TIMEOUT)
         
         if resp.status_code == 200:
             data = resp.json()
             resp.close()
+            resp = None  # Clear reference
+            # Force garbage collection after parsing JSON
+            gc.collect()
             return data
         else:
             print(f"HTTP {resp.status_code}")
             resp.close()
+            resp = None
             return None
     except Exception as e:
         print(f"Error fetching artwork: {e}")
+        if resp:
+            try:
+                resp.close()
+            except:
+                pass
+        gc.collect()  # Clean up on error
         return None
 
 def show_error():
@@ -132,7 +205,7 @@ if not wlan.isconnected():
     print(f"Connecting to {SSID}...")
     wlan.connect(SSID, PASSWORD)
     timeout = 0
-    while not wlan.isconnected() and timeout < 20:
+    while not wlan.isconnected() and timeout < WIFI_CONNECT_TIMEOUT:
         time.sleep(0.5)
         timeout += 1
     
@@ -149,8 +222,8 @@ print("Fetching initial artwork...")
 current_artwork = fetch_next_artwork()
 if current_artwork and "drawing" in current_artwork:
     draw_artwork(current_artwork["drawing"])
-    # Only play cheer for new artwork (display_count <= 1)
-    if current_artwork.get("display_count", 0) <= 1:
+    # Only play cheer for new artwork (display_count <= 1) and not during quiet hours
+    if current_artwork.get("display_count", 0) <= 1 and not current_artwork.get("quiet_hours", False):
         play_cheer()
     print(f"Displaying artwork by {current_artwork.get('artist', 'Unknown')}")
 else:
@@ -165,7 +238,6 @@ was_b_pressed = False
 was_c_pressed = False
 was_d_pressed = False
 last_auto_update = time.time()
-auto_update_interval = 300  # Auto-update every 5 minutes (300 seconds)
 
 while True:
     # Check for button presses with edge detection
@@ -181,9 +253,14 @@ while True:
         next_artwork = fetch_next_artwork()
         if next_artwork and "drawing" in next_artwork:
             draw_artwork(next_artwork["drawing"])
-            # Only play cheer for new artwork (display_count <= 1)
-            if next_artwork.get("display_count", 0) <= 1:
+            # Clear old artwork reference before playing audio to free memory
+            current_artwork = None
+            gc.collect()
+            
+            # Only play cheer for new artwork (display_count <= 1) and not during quiet hours
+            if next_artwork.get("display_count", 0) <= 1 and not next_artwork.get("quiet_hours", False):
                 play_cheer()
+            
             current_artwork = next_artwork
             print(f"Displaying artwork by {next_artwork.get('artist', 'Unknown')}")
             last_auto_update = time.time()  # Reset auto-update timer
@@ -220,14 +297,19 @@ while True:
         cosmic.set_brightness(brightness)
         
         # Auto-update every N seconds
-        if time.time() - last_auto_update >= auto_update_interval:
+        if time.time() - last_auto_update >= AUTO_UPDATE_INTERVAL:
             print("Auto-updating artwork...")
             next_artwork = fetch_next_artwork()
             if next_artwork and "drawing" in next_artwork:
                 draw_artwork(next_artwork["drawing"])
-                # Only play cheer for new artwork (display_count <= 1)
-                if next_artwork.get("display_count", 0) <= 1:
+                # Clear old artwork reference before playing audio to free memory
+                current_artwork = None
+                gc.collect()
+                
+                # Only play cheer for new artwork (display_count <= 1) and not during quiet hours
+                if next_artwork.get("display_count", 0) <= 1 and not next_artwork.get("quiet_hours", False):
                     play_cheer()
+                
                 current_artwork = next_artwork
                 print(f"Displaying artwork by {next_artwork.get('artist', 'Unknown')}")
             last_auto_update = time.time()
